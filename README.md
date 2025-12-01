@@ -23,13 +23,14 @@ npm install
 npm start
 ```
 
-2. The app starts in **listening** mode, waiting for MIDI input.
+2. The app starts in **listening** mode, waiting for MIDI input. Recording is triggered by `note on` or `CC 64` (sustain).
 
 3. When you play your MIDI device, recording starts automatically.
 
 4. **Keyboard Shortcuts** (press in the terminal):
    - `s`: Stop recording and return to listening mode
    - `p`: Play back the recorded MIDI
+   - `e`: Export recording to file
 
 5. New MIDI input automatically overwrites the previous recording.
 
