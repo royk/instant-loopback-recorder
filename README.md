@@ -23,9 +23,11 @@ npm install
 npm start
 ```
 
-2. The app starts in **listening** mode, waiting for MIDI input. Recording is triggered by `note on` or `CC 64` (sustain).
+2. The app starts in **listening** mode, waiting for MIDI input. 
 
-3. When you play your MIDI device, recording starts automatically.
+3. When you play your MIDI device, recording starts automatically. Specifically, recording starts on the following MIDI messages:
+   - noteon
+   - CC 64 (sustain)
 
 4. **Keyboard Shortcuts** (press in the terminal):
    - `s`: Stop recording and return to listening mode
