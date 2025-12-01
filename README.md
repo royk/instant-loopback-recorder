@@ -1,0 +1,52 @@
+# Piano Practice App
+
+A Node.js CLI application for macOS that helps you practice piano by recording MIDI input and playing it back.
+
+## Features
+
+- **Automatic Recording**: Starts recording when MIDI input is detected
+- **Terminal Keyboard Shortcuts**: Control the app using simple key presses in the terminal
+- **MIDI Playback**: Play back your recorded performance with original timing
+- **Simple CLI**: Clear status messages show what the app is doing
+
+## Installation
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+## Usage
+
+1. Start the app:
+```bash
+npm start
+```
+
+2. The app starts in **listening** mode, waiting for MIDI input.
+
+3. When you play your MIDI device, recording starts automatically.
+
+4. **Keyboard Shortcuts** (press in the terminal):
+   - `s`: Stop recording and return to listening mode
+   - `p`: Play back the recorded MIDI
+
+5. New MIDI input automatically overwrites the previous recording.
+
+6. Press `Ctrl+C` to exit.
+
+## Requirements
+
+- macOS
+- Node.js
+- A MIDI input device (piano/keyboard)
+- A MIDI output device (can be the same as input, or a virtual MIDI port)
+
+## How It Works
+
+- **Listening State**: Waiting for MIDI input. When MIDI is detected, automatically switches to recording.
+- **Recording State**: Actively recording all MIDI messages with timestamps.
+- **Playback State**: Playing back recorded MIDI messages with original timing.
+
+The app automatically selects the first available MIDI input and output device.
+
