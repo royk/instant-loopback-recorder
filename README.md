@@ -1,4 +1,4 @@
-# Piano Practice App
+# Instant Loopback Recorder for MIDI
 
 A Node.js CLI application for macOS that helps you practice piano by recording MIDI input and playing it back.
 
