@@ -23,6 +23,17 @@ let browser = null;
 let sheetPage = null;
 let sheetViewerInitialized = false;
 
+// Nektar Pacer configuration (assumes Program Change 1–6 on channel 1)
+const PACER_CHANNEL = 0; // MIDI channel 1 -> channel index 0
+const PACER_PEDAL_ACTIONS = {
+  1: 'export',    // Pedal 1 -> export MIDI
+  2: 'stop',      // Pedal 2 -> stop
+  3: 'start',     // Pedal 3 -> start playback
+  4: 'nextFile',  // Pedal 4 -> next sheet file
+  5: 'prevPage',  // Pedal 5 -> previous sheet page
+  6: 'nextPage',  // Pedal 6 -> next sheet page
+};
+
 // Discover available sheet music PDFs in ./sheet
 function loadSheetFiles() {
   const sheetDir = path.join(process.cwd(), 'sheet');
@@ -207,6 +218,15 @@ function initializeMIDI() {
 
 // Handle incoming MIDI messages
 function handleMIDIMessage(type, msg) {
+  // Nektar Pacer pedal handling (Program Change messages on PACER_CHANNEL)
+  if (type === 'program' && msg.channel === PACER_CHANNEL) {
+    const action = PACER_PEDAL_ACTIONS[msg.number];
+    if (action) {
+      handlePacerAction(action);
+      return;
+    }
+  }
+
   if (state === 'listening') {
     // Auto-start recording on noteon (note down) or sustain pedal (CC 64)
     if (type === 'noteon') {
@@ -232,6 +252,41 @@ function handleMIDIMessage(type, msg) {
       recordMessage(type, msg);
     }
     // Ignore other message types during playback
+  }
+}
+
+function handlePacerAction(action) {
+  switch (action) {
+    case 'export':
+      exportMIDI();
+      break;
+    case 'stop':
+      if (state === 'recording') {
+        stopRecording();
+      } else if (state === 'playback') {
+        stopPlayback();
+      }
+      break;
+    case 'start':
+      playBack();
+      break;
+    case 'nextFile':
+      sheetNextFile().catch((error) => {
+        console.error('Error moving to next sheet file (Pacer):', error);
+      });
+      break;
+    case 'prevPage':
+      sheetPrevPageWithWrap().catch((error) => {
+        console.error('Error moving to previous sheet page (Pacer):', error);
+      });
+      break;
+    case 'nextPage':
+      sheetNextPageWithWrap().catch((error) => {
+        console.error('Error moving to next sheet page (Pacer):', error);
+      });
+      break;
+    default:
+      break;
   }
 }
 
