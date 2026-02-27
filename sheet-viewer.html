@@ -24,14 +24,14 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 1rem;
-      padding: 0.5rem 1rem;
+      gap: 0.75rem;
+      padding: 0.25rem 0.75rem;
       background: #181818;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-      font-size: 0.9rem;
+      font-size: 0.8rem;
     }
     #pageInfo {
-      min-width: 80px;
+      min-width: 72px;
       text-align: center;
     }
     #canvasContainer {
@@ -39,13 +39,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: radial-gradient(circle at top, #222, #050505);
+      background: #000;
     }
     canvas {
       max-width: 100%;
       max-height: 100%;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8);
-      border-radius: 4px;
+      display: block;
       background: #fff;
     }
   </style>
@@ -82,14 +81,18 @@
       rendering = true;
 
       pdfDoc.getPage(pageNum).then((page) => {
-        const viewport = page.getViewport({ scale: 1.5 });
+        const viewport = page.getViewport({ scale: 1.0 });
 
-        const containerWidth = window.innerWidth * 0.95;
-        const containerHeight = (window.innerHeight - 40) * 0.95;
+        const toolbar = document.getElementById('toolbar');
+        const toolbarHeight = toolbar ? toolbar.offsetHeight : 0;
+        const containerWidth = window.innerWidth;
+        const containerHeight = window.innerHeight - toolbarHeight;
+
+        // Use as much of the screen as possible while preserving aspect ratio
         const scale = Math.min(
           containerWidth / viewport.width,
           containerHeight / viewport.height
-        );
+        ) * 0.995;
 
         const scaledViewport = page.getViewport({ scale });
         canvas.width = scaledViewport.width;
