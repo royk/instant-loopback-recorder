@@ -7,12 +7,16 @@
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": ["midi", "piano", "practice"],
+  "keywords": [
+    "midi",
+    "piano",
+    "practice"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@tonejs/midi": "^2.0.28",
     "easymidi": "^3.1.0",
-    "@tonejs/midi": "^2.0.28"
+    "puppeteer": "^24.37.5"
   }
 }
-

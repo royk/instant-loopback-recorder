@@ -2,6 +2,7 @@ import easymidi from 'easymidi';
 import midiModule from '@tonejs/midi';
 import fs from 'fs';
 import path from 'path';
+import puppeteer from 'puppeteer';
 
 // Extract Midi class from the module
 const { Midi } = midiModule;
@@ -15,23 +16,165 @@ let recordingStartTime = null;
 let playbackTimeouts = []; // Track playback timeouts so we can cancel them
 let playbackCompleteTimeout = null; // Timeout for returning to listening state
 
+// Sheet music viewing state
+let sheetFiles = [];
+let currentSheetIndex = 0;
+let browser = null;
+let sheetPage = null;
+let sheetViewerInitialized = false;
+
+// Discover available sheet music PDFs in ./sheet
+function loadSheetFiles() {
+  const sheetDir = path.join(process.cwd(), 'sheet');
+  if (!fs.existsSync(sheetDir)) {
+    console.warn('⚠️  Sheet directory not found:', sheetDir);
+    sheetFiles = [];
+    return;
+  }
+
+  const entries = fs.readdirSync(sheetDir);
+  const pdfs = entries
+    .filter((name) => name.toLowerCase().endsWith('.pdf'))
+    .map((name) => path.join(sheetDir, name))
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+  if (pdfs.length === 0) {
+    console.warn('⚠️  No PDF files found in sheet directory:', sheetDir);
+  }
+
+  sheetFiles = pdfs;
+  currentSheetIndex = 0;
+}
+
+async function initializeSheetViewer() {
+  if (sheetViewerInitialized) return;
+
+  loadSheetFiles();
+  if (sheetFiles.length === 0) {
+    console.warn('⚠️  Cannot open sheet viewer: no PDFs found in ./sheet');
+    return;
+  }
+
+  try {
+    browser = await puppeteer.launch({
+      headless: false,
+      defaultViewport: null, // let the browser window control the size
+      args: [
+        '--kiosk',
+        '--start-fullscreen',
+        '--no-default-browser-check',
+        '--disable-infobars',
+        '--allow-file-access-from-files',
+        '--window-position=0,0',
+        '--window-size=1920,1080',
+      ],
+    });
+
+    sheetPage = await browser.newPage();
+
+    const viewerPath = path.join(process.cwd(), 'sheet-viewer.html');
+    const viewerUrl = `file://${viewerPath}`;
+    await sheetPage.goto(viewerUrl);
+
+    // Try to ensure the content is using the full screen
+    await sheetPage.evaluate(() => {
+      try {
+        if (document.fullscreenEnabled && !document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+        if (typeof window.moveTo === 'function' && typeof window.resizeTo === 'function') {
+          window.moveTo(0, 0);
+          window.resizeTo(screen.width, screen.height);
+        }
+      } catch {
+        // Ignore fullscreen/resize errors
+      }
+    });
+
+    // Wait for viewer to be ready
+    await sheetPage.waitForFunction(
+      () => typeof window.loadPdf === 'function',
+      { timeout: 10000 }
+    );
+
+    // Load the first sheet file
+    const initialFile = sheetFiles[currentSheetIndex];
+    await sheetPage.evaluate((filePath) => {
+      window.loadPdf(filePath);
+    }, initialFile);
+
+    sheetViewerInitialized = true;
+    console.log('✓ Sheet viewer initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize sheet viewer:', error);
+    browser = null;
+    sheetPage = null;
+    sheetViewerInitialized = false;
+  }
+}
+
+async function sheetNextPageWithWrap() {
+  await initializeSheetViewer();
+  if (!sheetViewerInitialized || !sheetPage) return;
+
+  await sheetPage.evaluate(() => {
+    if (typeof window.nextPageWithWrap === 'function') {
+      window.nextPageWithWrap();
+    } else if (typeof window.nextPage === 'function') {
+      window.nextPage();
+    }
+  });
+}
+
+async function sheetPrevPageWithWrap() {
+  await initializeSheetViewer();
+  if (!sheetViewerInitialized || !sheetPage) return;
+
+  await sheetPage.evaluate(() => {
+    if (typeof window.prevPageWithWrap === 'function') {
+      window.prevPageWithWrap();
+    } else if (typeof window.prevPage === 'function') {
+      window.prevPage();
+    }
+  });
+}
+
+async function sheetNextFile() {
+  await initializeSheetViewer();
+  if (!sheetViewerInitialized || !sheetPage || sheetFiles.length === 0) return;
+
+  currentSheetIndex = (currentSheetIndex + 1) % sheetFiles.length;
+  const filePath = sheetFiles[currentSheetIndex];
+
+  await sheetPage.evaluate((fp) => {
+    if (typeof window.loadPdf === 'function') {
+      window.loadPdf(fp);
+    }
+  }, filePath);
+
+  console.log('♪ Switched to sheet file:', path.basename(filePath));
+}
+
 // Initialize MIDI
 function initializeMIDI() {
   try {
     // Find MIDI input (first available)
     const inputs = easymidi.getInputs();
-    if (inputs.length === 0) {
-      console.log('❌ No MIDI input devices found');
-      process.exit(1);
-    }
+    // if (inputs.length === 0) {
+    //   console.log('❌ No MIDI input devices found');
+    //   process.exit(1);
+    // }
     
     // Find MIDI output (first available)
     const outputs = easymidi.getOutputs();
-    if (outputs.length === 0) {
-      console.log('❌ No MIDI output devices found');
-      process.exit(1);
+    // if (outputs.length === 0) {
+    //   console.log('❌ No MIDI output devices found');
+    //   process.exit(1);
+    // }
+    if (inputs.length === 0 & outputs.length === 0) {
+      console.log('❌ No MIDI input or output devices found');
+      return;
     }
-    
     input = new easymidi.Input(inputs[0]);
     output = new easymidi.Output(outputs[0]);
     
@@ -336,17 +479,53 @@ function setupKeyboardInput() {
       exportMIDI();
       return;
     }
+
+    // '[' to go to previous page (with wrap within the current PDF)
+    if (key === '[') {
+      sheetPrevPageWithWrap().catch((error) => {
+        console.error('Error moving to previous sheet page:', error);
+      });
+      return;
+    }
+
+    // ']' to go to next page (with wrap within the current PDF)
+    if (key === ']') {
+      sheetNextPageWithWrap().catch((error) => {
+        console.error('Error moving to next sheet page:', error);
+      });
+      return;
+    }
+
+    // 'n' to go to next sheet file
+    if (key === 'n' || key === 'N') {
+      sheetNextFile().catch((error) => {
+        console.error('Error moving to next sheet file:', error);
+      });
+      return;
+    }
   });
   
   console.log('✓ Keyboard shortcuts enabled:');
   console.log('  - Press "s" to stop recording or stop playback');
   console.log('  - Press "p" to play back');
   console.log('  - Press "e" to export MIDI file');
+  console.log('  - Press "[" for previous sheet page (wraps within file)');
+  console.log('  - Press "]" for next sheet page (wraps within file)');
+  console.log('  - Press "n" for next sheet file');
 }
 
 // Cleanup on exit
 function cleanup() {
   console.log('\n👋 Shutting down...');
+  // Close sheet viewer browser if open
+  if (browser) {
+    browser.close().catch(() => {
+      // Ignore errors during shutdown
+    });
+    browser = null;
+    sheetPage = null;
+    sheetViewerInitialized = false;
+  }
   // Restore terminal settings
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(false);

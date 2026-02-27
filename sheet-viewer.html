@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sheet Music Viewer</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      color: #eee;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+    }
+    #toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 0.5rem 1rem;
+      background: #181818;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+      font-size: 0.9rem;
+    }
+    #pageInfo {
+      min-width: 80px;
+      text-align: center;
+    }
+    #canvasContainer {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #222, #050505);
+    }
+    canvas {
+      max-width: 100%;
+      max-height: 100%;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8);
+      border-radius: 4px;
+      background: #fff;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+</head>
+<body>
+  <div id="container">
+    <div id="toolbar">
+      <div id="fileName"></div>
+      <div id="pageInfo"></div>
+    </div>
+    <div id="canvasContainer">
+      <canvas id="pdfCanvas"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+    const canvas = document.getElementById('pdfCanvas');
+    const ctx = canvas.getContext('2d');
+    const pageInfoEl = document.getElementById('pageInfo');
+    const fileNameEl = document.getElementById('fileName');
+
+    let pdfDoc = null;
+    let currentPage = 1;
+    let pageCount = 0;
+    let rendering = false;
+    let pendingPage = null;
+
+    function renderPage(pageNum) {
+      if (!pdfDoc) return;
+      rendering = true;
+
+      pdfDoc.getPage(pageNum).then((page) => {
+        const viewport = page.getViewport({ scale: 1.5 });
+
+        const containerWidth = window.innerWidth * 0.95;
+        const containerHeight = (window.innerHeight - 40) * 0.95;
+        const scale = Math.min(
+          containerWidth / viewport.width,
+          containerHeight / viewport.height
+        );
+
+        const scaledViewport = page.getViewport({ scale });
+        canvas.width = scaledViewport.width;
+        canvas.height = scaledViewport.height;
+
+        const renderTask = page.render({
+          canvasContext: ctx,
+          viewport: scaledViewport,
+        });
+
+        renderTask.promise.then(() => {
+          rendering = false;
+          pageInfoEl.textContent = `Page ${currentPage} / ${pageCount}`;
+          if (pendingPage !== null) {
+            const next = pendingPage;
+            pendingPage = null;
+            renderPage(next);
+          }
+        });
+      });
+    }
+
+    function queueRenderPage(pageNum) {
+      if (rendering) {
+        pendingPage = pageNum;
+      } else {
+        renderPage(pageNum);
+      }
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pageInfoEl.textContent = '';
+    }
+
+    window.loadPdf = function (filePath) {
+      clearCanvas();
+      currentPage = 1;
+      pageCount = 0;
+
+      if (!filePath) return;
+
+      try {
+        const displayName = filePath.split(/[\\/]/).pop();
+        fileNameEl.textContent = displayName;
+      } catch {
+        fileNameEl.textContent = '';
+      }
+
+      const url = filePath;
+
+      const loadingTask = pdfjsLib.getDocument({
+        url,
+        withCredentials: false,
+      });
+
+      loadingTask.promise
+        .then((pdf) => {
+          pdfDoc = pdf;
+          pageCount = pdf.numPages || 1;
+          currentPage = 1;
+          queueRenderPage(currentPage);
+        })
+        .catch((err) => {
+          console.error('Error loading PDF:', err);
+          pdfDoc = null;
+          pageCount = 0;
+          clearCanvas();
+          pageInfoEl.textContent = 'Failed to load PDF';
+        });
+    };
+
+    window.nextPage = function () {
+      if (!pdfDoc || pageCount === 0) return;
+      if (currentPage >= pageCount) return;
+      currentPage += 1;
+      queueRenderPage(currentPage);
+    };
+
+    window.prevPage = function () {
+      if (!pdfDoc || pageCount === 0) return;
+      if (currentPage <= 1) return;
+      currentPage -= 1;
+      queueRenderPage(currentPage);
+    };
+
+    window.nextPageWithWrap = function () {
+      if (!pdfDoc || pageCount === 0) return;
+      if (currentPage >= pageCount) {
+        currentPage = 1;
+      } else {
+        currentPage += 1;
+      }
+      queueRenderPage(currentPage);
+    };
+
+    window.prevPageWithWrap = function () {
+      if (!pdfDoc || pageCount === 0) return;
+      if (currentPage <= 1) {
+        currentPage = pageCount;
+      } else {
+        currentPage -= 1;
+      }
+      queueRenderPage(currentPage);
+    };
+
+    window.addEventListener('resize', () => {
+      if (pdfDoc && pageCount > 0) {
+        queueRenderPage(currentPage);
+      }
+    });
+  </script>
+</body>
+</html>
+
