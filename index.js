@@ -188,10 +188,10 @@ function initializeMIDI() {
     // Try to auto-detect the Pacer pedal by name
     const pacerName = inputs.find((name) => isPacerLike(name));
 
-    // Piano is: not Pacer, not Midi Through, not RtMidi Output Client
+    // Piano is: not Pacer-like, not Midi Through, not RtMidi Output Client
     const pianoName = inputs.find(
       (name) =>
-        name !== pacerName &&
+        !isPacerLike(name) &&
         !isMidiThroughLike(name) &&
         !isRtMidiClientLike(name)
     );
