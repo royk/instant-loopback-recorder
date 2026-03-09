@@ -220,7 +220,7 @@ function initializeMIDI() {
 function handleMIDIMessage(type, msg) {
   // Nektar Pacer pedal handling (Program Change messages on PACER_CHANNEL)
   if (type === 'cc' && msg.channel === PACER_CHANNEL) {
-    const action = PACER_PEDAL_ACTIONS[msg.number];
+    const action = PACER_PEDAL_ACTIONS[msg.controller];
     if (action && msg.value > 0) {
       console.log('Pacer action:', action);
       handlePacerAction(action);
