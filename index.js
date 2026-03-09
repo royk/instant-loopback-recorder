@@ -26,12 +26,12 @@ let sheetViewerInitialized = false;
 // Nektar Pacer configuration (assumes Program Change 1–6 on channel 1)
 const PACER_CHANNEL = 0; // MIDI channel 1 -> channel index 0
 const PACER_PEDAL_ACTIONS = {
-  1: 'export',    // Pedal 1 -> export MIDI
-  2: 'stop',      // Pedal 2 -> stop
-  3: 'start',     // Pedal 3 -> start playback
-  4: 'nextFile',  // Pedal 4 -> next sheet file
-  5: 'prevPage',  // Pedal 5 -> previous sheet page
-  6: 'nextPage',  // Pedal 6 -> next sheet page
+  30: 'export',    // Pedal 1 -> export MIDI
+  31: 'stop',      // Pedal 2 -> stop
+  32: 'start',     // Pedal 3 -> start playback
+  27: 'nextFile',  // Pedal 4 -> next sheet file
+  28: 'prevPage',  // Pedal 5 -> previous sheet page
+  29: 'nextPage',  // Pedal 6 -> next sheet page
 };
 
 // Discover available sheet music PDFs in ./sheet
@@ -186,11 +186,11 @@ function initializeMIDI() {
       console.log('❌ No MIDI input or output devices found');
       return;
     }
-    input = new easymidi.Input(inputs[0]);
-    output = new easymidi.Output(outputs[0]);
+    input = new easymidi.Input(inputs[1]);
+    output = new easymidi.Output(outputs[1]);
     
-    console.log(`✓ Connected to MIDI input: ${inputs[0]}`);
-    console.log(`✓ Connected to MIDI output: ${outputs[0]}`);
+    console.log(`✓ Connected to MIDI input: ${inputs[1]}`);
+    console.log(`✓ Connected to MIDI output: ${outputs[1]}`);
     
     // Set up MIDI input handler
     input.on('noteon', (msg) => handleMIDIMessage('noteon', msg));
@@ -219,9 +219,10 @@ function initializeMIDI() {
 // Handle incoming MIDI messages
 function handleMIDIMessage(type, msg) {
   // Nektar Pacer pedal handling (Program Change messages on PACER_CHANNEL)
-  if (type === 'program' && msg.channel === PACER_CHANNEL) {
+  if (type === 'cc' && msg.channel === PACER_CHANNEL) {
     const action = PACER_PEDAL_ACTIONS[msg.number];
-    if (action) {
+    if (action && msg.value > 0) {
+      console.log('Pacer action:', action);
       handlePacerAction(action);
       return;
     }
