@@ -10,8 +10,9 @@ const { Midi } = midiModule;
 // State management
 let state = 'listening'; // 'listening', 'recording', 'playback'
 let recordedMessages = [];
-let input = null;
-let output = null;
+let input = null; // main piano keyboard input
+let output = null; // main output (typically the piano or a virtual port)
+let pacerInput = null; // dedicated input for the Nektar Pacer pedal
 let recordingStartTime = null;
 let playbackTimeouts = []; // Track playback timeouts so we can cancel them
 let playbackCompleteTimeout = null; // Timeout for returning to listening state
@@ -169,47 +170,96 @@ async function sheetNextFile() {
 // Initialize MIDI
 function initializeMIDI() {
   try {
-    // Find MIDI input (first available)
     const inputs = easymidi.getInputs();
-    // if (inputs.length === 0) {
-    //   console.log('❌ No MIDI input devices found');
-    //   process.exit(1);
-    // }
-    
-    // Find MIDI output (first available)
     const outputs = easymidi.getOutputs();
-    // if (outputs.length === 0) {
-    //   console.log('❌ No MIDI output devices found');
-    //   process.exit(1);
-    // }
-    if (inputs.length === 0 & outputs.length === 0) {
+
+    if (inputs.length === 0 && outputs.length === 0) {
       console.log('❌ No MIDI input or output devices found');
       return;
     }
-    input = new easymidi.Input(inputs[1]);
-    output = new easymidi.Output(outputs[1]);
-    
-    console.log(`✓ Connected to MIDI input: ${inputs[1]}`);
-    console.log(`✓ Connected to MIDI output: ${outputs[1]}`);
-    
-    // Set up MIDI input handler
-    input.on('noteon', (msg) => handleMIDIMessage('noteon', msg));
-    input.on('noteoff', (msg) => handleMIDIMessage('noteoff', msg));
-    input.on('cc', (msg) => handleMIDIMessage('cc', msg));
-    input.on('program', (msg) => handleMIDIMessage('program', msg));
-    input.on('channel aftertouch', (msg) => handleMIDIMessage('channel aftertouch', msg));
-    input.on('poly aftertouch', (msg) => handleMIDIMessage('poly aftertouch', msg));
-    input.on('pitch', (msg) => handleMIDIMessage('pitch', msg));
-    input.on('position', (msg) => handleMIDIMessage('position', msg));
-    input.on('mtc', (msg) => handleMIDIMessage('mtc', msg));
-    input.on('select', (msg) => handleMIDIMessage('select', msg));
-    input.on('clock', (msg) => handleMIDIMessage('clock', msg));
-    input.on('start', (msg) => handleMIDIMessage('start', msg));
-    input.on('continue', (msg) => handleMIDIMessage('continue', msg));
-    input.on('stop', (msg) => handleMIDIMessage('stop', msg));
-    input.on('activesense', (msg) => handleMIDIMessage('activesense', msg));
-    input.on('reset', (msg) => handleMIDIMessage('reset', msg));
-    
+
+    console.log('Available MIDI inputs:', inputs);
+    console.log('Available MIDI outputs:', outputs);
+
+    const isPacerLike = (name) => /pacer/i.test(name) || /nektar/i.test(name);
+    const isMidiThroughLike = (name) => /midi\s*through/i.test(name);
+    const isRtMidiClientLike = (name) => /rtmidi\s*output\s*client/i.test(name);
+
+    // Try to auto-detect the Pacer pedal by name
+    const pacerName = inputs.find((name) => isPacerLike(name));
+
+    // Piano is: not Pacer, not Midi Through, not RtMidi Output Client
+    const pianoName = inputs.find(
+      (name) =>
+        name !== pacerName &&
+        !isMidiThroughLike(name) &&
+        !isRtMidiClientLike(name)
+    );
+
+    // Set up main piano input (the one whose notes we record)
+    if (pianoName) {
+      input = new easymidi.Input(pianoName);
+      console.log(`✓ Connected to piano MIDI input: ${pianoName}`);
+
+      input.on('noteon', (msg) => handleMIDIMessage('noteon', msg));
+      input.on('noteoff', (msg) => handleMIDIMessage('noteoff', msg));
+      input.on('cc', (msg) => handleMIDIMessage('cc', msg));
+      input.on('program', (msg) => handleMIDIMessage('program', msg));
+      input.on('channel aftertouch', (msg) => handleMIDIMessage('channel aftertouch', msg));
+      input.on('poly aftertouch', (msg) => handleMIDIMessage('poly aftertouch', msg));
+      input.on('pitch', (msg) => handleMIDIMessage('pitch', msg));
+      input.on('position', (msg) => handleMIDIMessage('position', msg));
+      input.on('mtc', (msg) => handleMIDIMessage('mtc', msg));
+      input.on('select', (msg) => handleMIDIMessage('select', msg));
+      input.on('clock', (msg) => handleMIDIMessage('clock', msg));
+      input.on('start', (msg) => handleMIDIMessage('start', msg));
+      input.on('continue', (msg) => handleMIDIMessage('continue', msg));
+      input.on('stop', (msg) => handleMIDIMessage('stop', msg));
+      input.on('activesense', (msg) => handleMIDIMessage('activesense', msg));
+      input.on('reset', (msg) => handleMIDIMessage('reset', msg));
+    } else if (inputs.length > 0) {
+      // Fallback: just use the first available input for everything
+      const fallbackName = inputs[0];
+      input = new easymidi.Input(fallbackName);
+      console.log(`✓ Connected to MIDI input (fallback): ${fallbackName}`);
+
+      input.on('noteon', (msg) => handleMIDIMessage('noteon', msg));
+      input.on('noteoff', (msg) => handleMIDIMessage('noteoff', msg));
+      input.on('cc', (msg) => handleMIDIMessage('cc', msg));
+      input.on('program', (msg) => handleMIDIMessage('program', msg));
+      input.on('channel aftertouch', (msg) => handleMIDIMessage('channel aftertouch', msg));
+      input.on('poly aftertouch', (msg) => handleMIDIMessage('poly aftertouch', msg));
+      input.on('pitch', (msg) => handleMIDIMessage('pitch', msg));
+      input.on('position', (msg) => handleMIDIMessage('position', msg));
+      input.on('mtc', (msg) => handleMIDIMessage('mtc', msg));
+      input.on('select', (msg) => handleMIDIMessage('select', msg));
+      input.on('clock', (msg) => handleMIDIMessage('clock', msg));
+      input.on('start', (msg) => handleMIDIMessage('start', msg));
+      input.on('continue', (msg) => handleMIDIMessage('continue', msg));
+      input.on('stop', (msg) => handleMIDIMessage('stop', msg));
+      input.on('activesense', (msg) => handleMIDIMessage('activesense', msg));
+      input.on('reset', (msg) => handleMIDIMessage('reset', msg));
+    }
+
+    // Set up dedicated Pacer pedal input if we found one and it isn't the same as the piano
+    if (pacerName && pacerName !== pianoName) {
+      pacerInput = new easymidi.Input(pacerName);
+      console.log(`✓ Connected to Pacer MIDI input: ${pacerName}`);
+
+      pacerInput.on('cc', (msg) => handlePacerMIDIMessage('cc', msg));
+      pacerInput.on('program', (msg) => handlePacerMIDIMessage('program', msg));
+    }
+
+    // Choose an output: prefer something that looks like the piano, otherwise first available
+    if (outputs.length > 0) {
+      const pianoOutputName =
+        outputs.find((name) => pianoName && name.includes(pianoName)) ||
+        outputs[0];
+
+      output = new easymidi.Output(pianoOutputName);
+      console.log(`✓ Connected to MIDI output: ${pianoOutputName}`);
+    }
+
   } catch (error) {
     console.error('Error initializing MIDI:', error);
     process.exit(1);
@@ -218,16 +268,6 @@ function initializeMIDI() {
 
 // Handle incoming MIDI messages
 function handleMIDIMessage(type, msg) {
-  // Nektar Pacer pedal handling (Program Change messages on PACER_CHANNEL)
-  if (type === 'cc' && msg.channel === PACER_CHANNEL) {
-    const action = PACER_PEDAL_ACTIONS[msg.controller];
-    if (action && msg.value > 0) {
-      console.log('Pacer action:', action);
-      handlePacerAction(action);
-      return;
-    }
-  }
-
   if (state === 'listening') {
     // Auto-start recording on noteon (note down) or sustain pedal (CC 64)
     if (type === 'noteon') {
@@ -253,6 +293,18 @@ function handleMIDIMessage(type, msg) {
       recordMessage(type, msg);
     }
     // Ignore other message types during playback
+  }
+}
+
+// Handle incoming MIDI messages from the Nektar Pacer pedal
+function handlePacerMIDIMessage(type, msg) {
+  // Pacer typically sends CCs or Program Change; we only care about our mapped controls
+  if (type === 'cc' && msg.channel === PACER_CHANNEL) {
+    const action = PACER_PEDAL_ACTIONS[msg.controller];
+    if (action && msg.value > 0) {
+      console.log('Pacer action:', action);
+      handlePacerAction(action);
+    }
   }
 }
 
@@ -587,6 +639,7 @@ function cleanup() {
     process.stdin.setRawMode(false);
   }
   if (input) input.close();
+  if (pacerInput) pacerInput.close();
   if (output) output.close();
   process.exit(0);
 }
